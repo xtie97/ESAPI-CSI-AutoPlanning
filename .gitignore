@@ -1,0 +1,26 @@
+# Build and IDE output
+**/bin/
+**/obj/
+**/.vs/
+*.user
+*.suo
+
+# Proprietary ESAPI reference assemblies and other compiled binaries
+**/lib/esapi/*.dll
+*.dll
+*.exe
+
+# Patient, calculation and clinical reference material
+*.log
+*.dcm
+*.DCM
+*.dicom
+patient-data/
+clinical-documents/
+*.docx
+*.pdf
+*.zip
+
+# Python cache
+__pycache__/
+*.pyc

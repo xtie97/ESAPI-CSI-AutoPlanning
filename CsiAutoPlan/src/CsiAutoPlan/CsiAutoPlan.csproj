@@ -1,0 +1,88 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ESAPI binary plugin for Eclipse 18.x (.NET Framework 4.8, x64).
+    Build:  dotnet build -c Release            (or open CsiAutoPlan.sln in Visual Studio 2019/2022)
+    Output: bin\Release\AutoPlanv<ScriptVersion>.esapi.dll - the only file to deploy. All settings are compiled in
+            (SiteSettings.cs, StructureRecipes.cs); there is no settings file.
+
+    NEW VERSION = change ScriptVersion below (one line). It sets the DLL / script name shown in Eclipse
+    (Tools > Scripts > AutoPlanv1.7.esapi.dll), the assembly and file version (Script Approval needs a new
+    version for every modified build), the dialog title and the log file names.
+
+    ESAPI reference assemblies (VMS.TPS.Common.Model.API.dll / .Types.dll) are looked up in this order:
+      1. -p:EsapiDir="..."  (command line) or an EsapiDir property you add below
+      2. environment variable ESAPI_DIR
+      3. <repo>\lib\esapi\  (copy the two DLLs there from an Eclipse 18 workstation; do not commit them)
+      4. C:\Program Files (x86)\Varian\RTM\18.1\esapi\API   and   ...\18.0\esapi\API
+    If none contains the DLLs the build stops with an explanatory error instead of CS0234.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- ===== bump for every update you deploy: digits and dots only, e.g. 1.1, 1.2, 1.2.1 ===== -->
+    <ScriptVersion>1.7</ScriptVersion>
+    <ScriptBaseName>AutoPlan</ScriptBaseName>
+    <!-- Eclipse lists binary plugins by file name; it must end in .esapi.dll -->
+    <AssemblyName>$(ScriptBaseName)v$(ScriptVersion).esapi</AssemblyName>
+    <RootNamespace>CsiAutoPlan</RootNamespace>
+    <LangVersion>7.3</LangVersion>
+    <!-- Script Approval is tied to the assembly version (Varian API book, sec. 7.5.1): derived from ScriptVersion. -->
+    <Version>$(ScriptVersion)</Version>
+    <AssemblyVersion>$(ScriptVersion)</AssemblyVersion>
+    <FileVersion>$(ScriptVersion)</FileVersion>
+    <InformationalVersion>$(ScriptBaseName)v$(ScriptVersion)</InformationalVersion>
+    <Product>CSI Proton PBS Auto-Planning</Product>
+    <Description>Pediatric proton PBS craniospinal auto-planning (Eclipse ESAPI plugin)</Description>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <!-- ESAPI location probing (first match wins) -->
+  <PropertyGroup>
+    <EsapiApiDll>VMS.TPS.Common.Model.API.dll</EsapiApiDll>
+    <EsapiDir Condition="'$(EsapiDir)' == '' and '$(ESAPI_DIR)' != ''">$(ESAPI_DIR)</EsapiDir>
+    <EsapiDir Condition="'$(EsapiDir)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\lib\esapi\$(EsapiApiDll)')">$(MSBuildThisFileDirectory)..\..\lib\esapi</EsapiDir>
+    <EsapiDir Condition="'$(EsapiDir)' == '' and Exists('$(MSBuildProgramFiles32)\Varian\RTM\18.1\esapi\API\$(EsapiApiDll)')">$(MSBuildProgramFiles32)\Varian\RTM\18.1\esapi\API</EsapiDir>
+    <EsapiDir Condition="'$(EsapiDir)' == '' and Exists('$(MSBuildProgramFiles32)\Varian\RTM\18.0\esapi\API\$(EsapiApiDll)')">$(MSBuildProgramFiles32)\Varian\RTM\18.0\esapi\API</EsapiDir>
+    <EsapiDir>$([MSBuild]::EnsureTrailingSlash('$(EsapiDir)'))</EsapiDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="VMS.TPS.Common.Model.API">
+      <HintPath>$(EsapiDir)VMS.TPS.Common.Model.API.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VMS.TPS.Common.Model.Types">
+      <HintPath>$(EsapiDir)VMS.TPS.Common.Model.Types.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <!-- ESAPI types reference WPF assemblies (e.g. Structure.MeshGeometry) -->
+    <Reference Include="PresentationCore" />
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
+
+  <!-- ScriptVersion must be a valid assembly version. -->
+  <Target Name="CheckScriptVersion" BeforeTargets="GenerateAssemblyInfo;CoreCompile">
+    <PropertyGroup>
+      <_ScriptVersionOk>$([System.Text.RegularExpressions.Regex]::IsMatch('$(ScriptVersion)', '^\d+(\.\d+){1,3}$'))</_ScriptVersionOk>
+    </PropertyGroup>
+    <Error Condition="'$(_ScriptVersionOk)' != 'True'"
+           Text="ScriptVersion '$(ScriptVersion)' must be 2-4 numbers separated by dots (e.g. 1.1 or 1.2.1) - it becomes the assembly version." />
+    <Message Importance="high" Text="Script: $(AssemblyName).dll (version $(ScriptVersion))" />
+  </Target>
+
+  <!-- Stops a real build with an explanation when the ESAPI DLLs are missing.
+       Skipped in Visual Studio's design-time build: failing there makes Solution Explorer flag EVERY
+       reference (System, System.Core, ...) instead of just the two VMS.TPS ones. -->
+  <Target Name="CheckEsapiReferences" BeforeTargets="ResolveAssemblyReferences" Condition="'$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <_EsapiMissing Condition="!Exists('$(EsapiDir)VMS.TPS.Common.Model.API.dll') or !Exists('$(EsapiDir)VMS.TPS.Common.Model.Types.dll')">true</_EsapiMissing>
+    </PropertyGroup>
+    <Message Importance="high" Condition="'$(_EsapiMissing)' == 'true'" Text="ESAPI search: -p:EsapiDir / ESAPI_DIR = '$(ESAPI_DIR)'; $(MSBuildThisFileDirectory)..\..\lib\esapi; $(MSBuildProgramFiles32)\Varian\RTM\18.1\esapi\API; $(MSBuildProgramFiles32)\Varian\RTM\18.0\esapi\API" />
+    <Error Condition="'$(_EsapiMissing)' == 'true'"
+           Text="ESAPI reference assemblies not found (EsapiDir = '$(EsapiDir)'). Copy VMS.TPS.Common.Model.API.dll and VMS.TPS.Common.Model.Types.dll from an Eclipse 18 workstation (C:\Program Files (x86)\Varian\RTM\18.x\esapi\API) into &lt;repo&gt;\lib\esapi\, or set the user environment variable ESAPI_DIR to the folder that contains them and restart Visual Studio. See README section 2." />
+    <Message Importance="high" Condition="'$(_EsapiMissing)' != 'true'" Text="ESAPI references: $(EsapiDir)" />
+  </Target>
+</Project>
